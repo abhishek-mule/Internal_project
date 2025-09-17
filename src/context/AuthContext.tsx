@@ -1,0 +1,144 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useAddress, useMetamask, useDisconnect } from "@thirdweb-dev/react";
+import { User } from '../types';
+
+interface AuthContextType {
+  user: User | null;
+  login: (email: string, password: string, role?: 'farmer' | 'middleman' | 'admin') => Promise<boolean>;
+  register: (userData: Partial<User> & { password: string }) => Promise<boolean>;
+  logout: () => void;
+  isLoading: boolean;
+  connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
+  walletAddress: string | undefined;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const address = useAddress();
+  const connect = useMetamask();
+  const disconnect = useDisconnect();
+
+  useEffect(() => {
+    const initializeUser = async () => {
+      const storedUser = localStorage.getItem('farmconnect_user');
+      if (storedUser) {
+        const parsedUser = JSON.parse(storedUser);
+        if (address && (!parsedUser.walletAddress || parsedUser.walletAddress !== address)) {
+          const updatedUser = { ...parsedUser, walletAddress: address };
+          localStorage.setItem('farmconnect_user', JSON.stringify(updatedUser));
+          setUser(updatedUser);
+        } else {
+          setUser(parsedUser);
+        }
+      }
+      setIsLoading(false);
+    };
+    initializeUser();
+  }, [address]);
+
+  const connectWallet = async () => {
+    try {
+      await connect();
+      if (user && address) {
+        const updatedUser = { ...user, walletAddress: address };
+        localStorage.setItem('farmconnect_user', JSON.stringify(updatedUser));
+        setUser(updatedUser);
+      }
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+    }
+  };
+
+  const disconnectWallet = () => {
+    disconnect();
+    if (user) {
+      const updatedUser = { ...user };
+      delete updatedUser.walletAddress;
+      localStorage.setItem('farmconnect_user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    }
+  };
+
+  const login = async (email: string, password: string, role?: 'farmer' | 'middleman' | 'admin') => {
+    try {
+      const mockUser: User = {
+        id: '1',
+        name: 'John Doe',
+        email,
+        role: role ?? 
+          (email.includes('farmer')
+            ? 'farmer'
+            : email.includes('admin')
+            ? 'admin'
+            : 'middleman'),
+        walletAddress: address,
+      };
+
+      localStorage.setItem('farmconnect_user', JSON.stringify(mockUser));
+      setUser(mockUser);
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+      return true;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
+    }
+  };
+
+  const register = async (userData: Partial<User> & { password: string }): Promise<boolean> => {
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+
+      const newUser: User = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: userData.name || 'Anonymous User',
+        email: userData.email || '',
+        role: userData.role || 'farmer',
+        walletAddress: address,
+        phone: userData.phone,
+        location: userData.location,
+      };
+
+      localStorage.setItem('farmconnect_user', JSON.stringify(newUser));
+      setUser(newUser);
+      return true;
+    } catch (error) {
+      console.error('Registration failed:', error);
+      return false;
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('farmconnect_user');
+    setUser(null);
+    disconnectWallet();
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        register,
+        logout,
+        isLoading,
+        connectWallet,
+        disconnectWallet,
+        walletAddress: address,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
