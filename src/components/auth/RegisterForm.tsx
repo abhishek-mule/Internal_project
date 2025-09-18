@@ -21,9 +21,33 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
   const { register, isLoading } = useAuth();
 
   const roles = [
-    { id: 'farmer', name: 'Farmer', icon: '🌱', color: 'bg-green-100 text-green-800 border-green-200' },
-    { id: 'middleman', name: 'Middleman', icon: '🚛', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-    { id: 'admin', name: 'Admin', icon: '⚙️', color: 'bg-purple-100 text-purple-800 border-purple-200' }
+    { 
+      id: 'farmer',
+      name: 'Farmer',
+      icon: '🌱',
+      color: 'bg-gradient-to-br from-green-50 to-emerald-100',
+      borderColor: 'border-emerald-200',
+      activeColor: 'ring-emerald-500',
+      description: 'For agricultural producers'
+    },
+    { 
+      id: 'middleman',
+      name: 'Middleman',
+      icon: '🚛',
+      color: 'bg-gradient-to-br from-blue-50 to-sky-100',
+      borderColor: 'border-sky-200',
+      activeColor: 'ring-sky-500',
+      description: 'For distributors and traders'
+    },
+    { 
+      id: 'admin',
+      name: 'Admin',
+      icon: '⚙️',
+      color: 'bg-gradient-to-br from-purple-50 to-indigo-100',
+      borderColor: 'border-indigo-200',
+      activeColor: 'ring-indigo-500',
+      description: 'For platform administrators'
+    }
   ];
 
   const [error, setError] = useState('');
@@ -72,17 +96,19 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
     >
       <div className="text-center mb-8">
         <div className="flex justify-center mb-4">
-          <div className="p-3 bg-green-100 rounded-full">
-            <Sprout className="w-8 h-8 text-green-600" />
+          <div className="p-4 bg-gradient-to-br from-green-100 to-emerald-100 rounded-full shadow-lg">
+            <Sprout className="w-10 h-10 text-emerald-600" />
           </div>
         </div>
-        <h2 className="text-3xl font-bold text-gray-900 mb-2">Join FarmConnect</h2>
-        <p className="text-gray-600">Create your account to get started</p>
+        <h2 className="text-4xl font-bold bg-gradient-to-r from-emerald-600 to-green-600 bg-clip-text text-transparent mb-3">
+          Join AgroChain
+        </h2>
+        <p className="text-gray-600 text-lg">Create your account to get started</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="p-3 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
+          <div className="p-4 text-sm text-red-800 bg-red-50 border-l-4 border-red-500 rounded-lg shadow-sm" role="alert">
             {error}
           </div>
         )}
@@ -91,32 +117,33 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
           <label className="block text-sm font-medium text-gray-700 mb-2">
             I am a *
           </label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-4">
             {roles.map((role) => (
               <button
                 key={role.id}
                 type="button"
                 onClick={() => handleInputChange('role', role.id)}
-                className={`p-3 rounded-xl border-2 text-sm font-medium transition-all duration-200 ${
+                className={`p-4 rounded-xl border-2 text-sm font-medium transition-all duration-200 ${
                   formData.role === role.id
-                    ? role.color + ' scale-105 shadow-md'
-                    : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                    ? `${role.color} ${role.borderColor} ring-2 ${role.activeColor} shadow-lg scale-105`
+                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                 }`}
               >
-                <div className="text-xl mb-1">{role.icon}</div>
-                {role.name}
+                <div className="text-2xl mb-2">{role.icon}</div>
+                <div className="font-semibold mb-1">{role.name}</div>
+                <div className="text-xs text-gray-500">{role.description}</div>
               </button>
             ))}
           </div>
         </div>
 
         {/* Name Field */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+        <div className="space-y-1">
+          <label className="block text-sm font-medium text-gray-700">
             Full Name
           </label>
-          <div className="relative">
-            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <div className="relative group">
+            <User className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-emerald-500 transition-colors" />
             <input
               type="text"
               value={formData.name}
@@ -175,7 +202,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => handleInputChange('password', e.target.value)}
-                className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white transition-all duration-200 hover:shadow-sm"
                 placeholder="Password"
                 required
               />
@@ -199,7 +226,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={formData.confirmPassword}
                 onChange={(e) => handleInputChange('confirmPassword', e.target.value)}
-                className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                className="w-full pl-10 pr-12 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-white transition-all duration-200 hover:shadow-sm"
                 placeholder="Confirm"
                 required
               />
@@ -218,7 +245,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
         <button
           type="submit"
           disabled={isLoading || !formData.role}
-          className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white py-3 px-4 rounded-xl font-semibold hover:from-green-700 hover:to-blue-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+          className="w-full bg-gradient-to-r from-emerald-500 to-green-500 text-white py-3.5 px-4 rounded-xl font-semibold hover:from-emerald-600 hover:to-green-600 focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 shadow-md hover:shadow-lg"
         >
           {isLoading ? (
             <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -236,7 +263,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
           Already have an account?{' '}
           <button
             onClick={onToggleMode}
-            className="text-green-600 hover:text-green-700 font-medium"
+            className="text-emerald-600 hover:text-emerald-700 font-semibold transition-colors"
           >
             Sign in
           </button>

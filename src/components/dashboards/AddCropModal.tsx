@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { X, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CropMetadata } from '../../types';
 import { useContract } from '../../hooks/useContract';
+import { NFTMetadataInput } from '@thirdweb-dev/sdk';
 
 interface AddCropModalProps {
   isOpen: boolean;
@@ -48,27 +48,35 @@ export const AddCropModal: React.FC<AddCropModalProps> = ({
     try {
       setIsLoading(true);
 
-      // Convert form data to NFT metadata
-      const metadata: CropMetadata = {
+      // Upload image first
+      let imageUrl = '';
+      if (formData.image) {
+        const uploadResult = await contract.storage.upload(formData.image);
+        imageUrl = uploadResult.uris[0];
+      }
+
+      // Prepare NFT metadata with attributes
+      const metadata: NFTMetadataInput = {
         name: formData.name,
         description: formData.description,
-        image: formData.image ? URL.createObjectURL(formData.image) : '',
-        properties: {
-          variety: formData.variety,
-          quantity: parseFloat(formData.quantity),
-          unit: formData.unit,
-          pricePerUnit: parseFloat(formData.pricePerUnit),
-          plantedDate: formData.plantedDate,
-          expectedHarvest: formData.expectedHarvest,
-          status: 'growing' as const,
-          progress: 0,
-          health: 100
-        }
+        image: imageUrl || undefined,
+        attributes: [
+          { trait_type: 'variety', value: formData.variety },
+          { trait_type: 'quantity', value: parseFloat(formData.quantity) },
+          { trait_type: 'unit', value: formData.unit },
+          { trait_type: 'pricePerUnit', value: parseFloat(formData.pricePerUnit) },
+          { trait_type: 'plantedDate', value: formData.plantedDate },
+          { trait_type: 'expectedHarvest', value: formData.expectedHarvest },
+          { trait_type: 'status', value: 'growing' },
+          { trait_type: 'progress', value: 0 },
+          { trait_type: 'health', value: 100 }
+        ]
       };
 
-      // Mint the NFT
-      const tokenId = await contract.mintProduct(metadata);
-      onSuccess(tokenId);
+      // Mint NFT with metadata
+      const result = await contract.erc721.mint(metadata);
+      const nftId = result.id.toString();
+      onSuccess(nftId);
       onClose();
     } catch (error) {
       console.error('Failed to add crop:', error);

@@ -31,6 +31,10 @@ export interface CropMetadata {
   name: string;
   description: string;
   image: string;
+  attributes?: Array<{
+    trait_type: string;
+    value: string | number;
+  }>;
   properties: {
     variety: string;
     quantity: number;

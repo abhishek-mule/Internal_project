@@ -1,35 +1,32 @@
-import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import React, { createContext, useState, useEffect } from 'react';
 import { useAddress, useDisconnect, useMetamask } from "@thirdweb-dev/react";
-import { AuthManager } from '../core/auth/AuthManager';
-import { SessionManager } from '../core/auth/SessionManager';
 import { User } from '../types';
 import { RegisterData } from '../types/auth';
+import * as authService from '../services/auth.service';
+import { UserType, AuthErrorType } from '../services/auth.service';
 
 interface ExtendedAuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (userData: RegisterData) => Promise<boolean>;
-  logout: () => void;
+  user: UserType | null;
+  login: (email: string, password: string) => Promise<{ error?: AuthErrorType }>;
+  register: (userData: RegisterData) => Promise<{ error?: AuthErrorType }>;
+  logout: () => Promise<{ error?: AuthErrorType }>;
   isLoading: boolean;
   error: string | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   walletAddress: string | undefined;
-  refreshToken: string | undefined;
 }
 
 export const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<UserType | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
   const address = useAddress();
-  const connectMetamask = useMetamask(); // @ts-ignore: Ignore the deprecation warning for now
+  const connectMetamask = useMetamask();
   const disconnect = useDisconnect();
-  const authManager = AuthManager.getInstance();
-  const sessionManager = SessionManager.getInstance();
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
     const session = sessionManager.getCurrentSession();
