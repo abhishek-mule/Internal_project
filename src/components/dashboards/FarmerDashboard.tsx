@@ -1,14 +1,28 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  TrendingUp, DollarSign, Package, Users, Star, Plus, 
-  Sprout, Droplets, Sun, AlertCircle, Eye, Edit3
+  TrendingUp, DollarSign, Package, Star, Plus, 
+  Sprout, Sun, Wallet, Eye, Edit3, Droplets
 } from 'lucide-react';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { Crop, Transaction } from '../../types';
+import { useAddress, useMetamask } from "@thirdweb-dev/react";
+import { AddCropModal } from './AddCropModal';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Crop } from '../../types';
 
 export const FarmerDashboard: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState('7d');
+  const [isAddCropModalOpen, setIsAddCropModalOpen] = useState(false);
+  
+  const address = useAddress();
+  const connect = useMetamask();
+
+  const handleConnectWallet = useCallback(async () => {
+    try {
+      await connect();
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+    }
+  }, [connect]);
 
   const stats = [
     { label: 'Total Revenue', value: '$12,450', change: '+18%', icon: DollarSign, color: 'text-green-600 bg-green-100' },
@@ -101,14 +115,29 @@ export const FarmerDashboard: React.FC = () => {
               <p className="text-gray-600">Here's what's growing in your digital farm today</p>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center bg-green-100 px-4 py-2 rounded-full">
-                <Sun className="w-5 h-5 text-yellow-500 mr-2" />
-                <span className="text-sm font-medium text-green-800">Sunny, 78°F</span>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center bg-green-100 px-4 py-2 rounded-full">
+                  <Sun className="w-5 h-5 text-yellow-500 mr-2" />
+                  <span className="text-sm font-medium text-green-800">Sunny, 78°F</span>
+                </div>
+                {!address ? (
+                  <button
+                    onClick={handleConnectWallet}
+                    className="bg-blue-600 text-white px-6 py-2 rounded-xl hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                  >
+                    <Wallet className="w-5 h-5" />
+                    <span>Connect Wallet</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setIsAddCropModalOpen(true)}
+                    className="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 transition-colors flex items-center space-x-2"
+                  >
+                    <Plus className="w-5 h-5" />
+                    <span>Add Crop</span>
+                  </button>
+                )}
               </div>
-              <button className="bg-green-600 text-white px-6 py-2 rounded-xl hover:bg-green-700 transition-colors flex items-center space-x-2">
-                <Plus className="w-5 h-5" />
-                <span>Add Crop</span>
-              </button>
             </div>
           </div>
         </div>
@@ -292,6 +321,15 @@ export const FarmerDashboard: React.FC = () => {
           </div>
         </div>
       </div>
+      {/* Add Crop Modal */}
+      <AddCropModal
+        isOpen={isAddCropModalOpen}
+        onClose={() => setIsAddCropModalOpen(false)}
+        onSuccess={(cropId) => {
+          console.log('New crop added:', cropId);
+          // Here you could refresh the crops list
+        }}
+      />
     </div>
   );
 };

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { BrowserRouter as Router } from 'react-router-dom';
 import { ThirdwebProvider } from "@thirdweb-dev/react";
-import { AuthProvider, useAuth } from './context/AuthContext';
+import { AuthProvider } from './context/AuthContext';
+import { useAuth } from './hooks/useAuth';
 import { ContractProvider } from './context/ContractContext';
-import { PaymentProvider } from './context/PaymentContext';
+import { PaymentProvider } from './features/payment/context/PaymentContext';
 import { AuthPage } from './components/auth/AuthPage';
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { NETWORK } from './config/web3Config';
@@ -53,7 +54,14 @@ function App() {
   return (
     <ThirdwebProvider
       activeChain={NETWORK}
-      clientId={process.env.VITE_THIRDWEB_CLIENT_ID}
+      clientId={import.meta.env.VITE_APP_THIRDWEB_CLIENT_ID}
+      autoConnect={true}
+      dAppMeta={{
+        name: "FarmConnect",
+        description: "Decentralized Agricultural Supply Chain",
+        logoUrl: "/logo.png",
+        url: window.location.origin,
+      }}
     >
       <Router>
         <AuthProvider>

@@ -1,68 +1,116 @@
 import { SmartContract } from "@thirdweb-dev/sdk";
-import { BaseContract, BigNumber, ethers } from "ethers";
+import { BaseContract as TWBaseContract } from "@thirdweb-dev/sdk";
+import { ethers } from "ethers";
+import { BaseContract } from "../core/contracts/BaseContract";
+import { ContractManager } from "../core/contracts/ContractManager";
+import { CacheManager } from "../core/cache/CacheManager";
 
-export class MarketplaceContract {
-  private contract: SmartContract<BaseContract>;
+interface ProductListing {
+  tokenId: string;
+  seller: string;
+  price: string;
+  active: boolean;
+}
 
-  constructor(contract: SmartContract<BaseContract>) {
-    this.contract = contract;
+export class MarketplaceContract extends BaseContract {
+  private cacheManager: CacheManager;
+  private contractManager: ContractManager;
+
+  constructor(contract: SmartContract<TWBaseContract>) {
+    super(contract);
+    this.cacheManager = CacheManager.getInstance();
+    this.contractManager = ContractManager.getInstance();
   }
 
   async listProduct(tokenId: string, price: number) {
-    try {
-      const priceInWei = ethers.utils.parseEther(price.toString());
-      await this.contract.call("listItem", [tokenId, priceInWei]);
-    } catch (error) {
-      console.error("Error listing product:", error);
-      throw error;
+    if (!tokenId || price <= 0) {
+      throw new Error('Invalid listing parameters');
     }
+
+    return this.executeWithRetry(
+      async () => {
+        const priceInWei = ethers.utils.parseEther(price.toString());
+        await this.contract.call("listItem", [tokenId, priceInWei]);
+        this.cacheManager.clearContractCache();
+      },
+      'List product'
+    );
   }
 
   async buyProduct(tokenId: string, price: number) {
-    try {
-      const priceInWei = ethers.utils.parseEther(price.toString());
-      await this.contract.call("buyItem", [tokenId], { value: priceInWei });
-    } catch (error) {
-      console.error("Error buying product:", error);
-      throw error;
+    if (!tokenId || price <= 0) {
+      throw new Error('Invalid purchase parameters');
     }
+
+    return this.executeWithRetry(
+      async () => {
+        const priceInWei = ethers.utils.parseEther(price.toString());
+        await this.contract.call("buyItem", [tokenId], { value: priceInWei });
+        this.cacheManager.clearContractCache();
+      },
+      'Buy product'
+    );
   }
 
   async cancelListing(tokenId: string) {
-    try {
-      await this.contract.call("cancelListing", [tokenId]);
-    } catch (error) {
-      console.error("Error canceling listing:", error);
-      throw error;
+    if (!tokenId) {
+      throw new Error('Invalid token ID');
     }
+
+    return this.executeWithRetry(
+      async () => {
+        await this.contract.call("cancelListing", [tokenId]);
+        this.cacheManager.clearContractCache();
+      },
+      'Cancel listing'
+    );
   }
 
-  async getProductListing(tokenId: string) {
-    try {
-      const listing = await this.contract.call("getListing", [tokenId]);
-      return {
-        seller: listing.seller,
-        price: ethers.utils.formatEther(listing.price),
-        active: listing.active
-      };
-    } catch (error) {
-      console.error("Error fetching product listing:", error);
-      throw error;
+  async getProductListing(tokenId: string): Promise<ProductListing> {
+    const cacheKey = `listing-${tokenId}`;
+    const cachedListing = this.cacheManager.get<ProductListing>(cacheKey);
+    
+    if (cachedListing) {
+      return cachedListing;
     }
+
+    return this.executeWithRetry(
+      async () => {
+        const listing = await this.contract.call("getListing", [tokenId]);
+        const formattedListing = {
+          tokenId: listing.tokenId.toString(),
+          seller: listing.seller,
+          price: ethers.utils.formatEther(listing.price),
+          active: listing.active
+        };
+        this.cacheManager.set(cacheKey, formattedListing);
+        return formattedListing;
+      },
+      'Get product listing'
+    );
   }
 
-  async getAllListings() {
-    try {
-      const listings = await this.contract.call("getAllListings");
-      return listings.map((listing: any) => ({
-        tokenId: listing.tokenId.toString(),
-        seller: listing.seller,
-        price: ethers.utils.formatEther(listing.price),
-        active: listing.active
-      }));
-    } catch (error) {
-      console.error("Error fetching all listings:", error);
-      throw error;
+  async getAllListings(): Promise<ProductListing[]> {
+    const cacheKey = 'all-listings';
+    const cachedListings = this.cacheManager.get<ProductListing[]>(cacheKey);
+    
+    if (cachedListings) {
+      return cachedListings;
     }
+
+    return this.executeWithRetry(
+      async () => {
+        const listings = await this.contract.call("getAllListings");
+        const formattedListings = listings.map((listing: any) => ({
+          tokenId: listing.tokenId.toString(),
+          seller: listing.seller,
+          price: ethers.utils.formatEther(listing.price),
+          active: listing.active
+        }));
+        this.cacheManager.set(cacheKey, formattedListings);
+        return formattedListings;
+      },
+      'Get all listings'
+    );
   }
 }

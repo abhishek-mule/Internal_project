@@ -1,144 +1,258 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { useAddress, useMetamask, useDisconnect } from "@thirdweb-dev/react";
+import React, { createContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { useAddress, useDisconnect, useMetamask } from "@thirdweb-dev/react";
+import { AuthManager } from '../core/auth/AuthManager';
+import { SessionManager } from '../core/auth/SessionManager';
 import { User } from '../types';
+import { RegisterData } from '../types/auth';
 
-interface AuthContextType {
+interface ExtendedAuthContextType {
   user: User | null;
-  login: (email: string, password: string, role?: 'farmer' | 'middleman' | 'admin') => Promise<boolean>;
-  register: (userData: Partial<User> & { password: string }) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<boolean>;
+  register: (userData: RegisterData) => Promise<boolean>;
   logout: () => void;
   isLoading: boolean;
+  error: string | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => void;
   walletAddress: string | undefined;
+  refreshToken: string | undefined;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export const AuthContext = createContext<ExtendedAuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
   const address = useAddress();
-  const connect = useMetamask();
+  const connectMetamask = useMetamask(); // @ts-ignore: Ignore the deprecation warning for now
   const disconnect = useDisconnect();
+  const authManager = AuthManager.getInstance();
+  const sessionManager = SessionManager.getInstance();
 
-  useEffect(() => {
-    const initializeUser = async () => {
-      const storedUser = localStorage.getItem('farmconnect_user');
-      if (storedUser) {
-        const parsedUser = JSON.parse(storedUser);
-        if (address && (!parsedUser.walletAddress || parsedUser.walletAddress !== address)) {
-          const updatedUser = { ...parsedUser, walletAddress: address };
-          localStorage.setItem('farmconnect_user', JSON.stringify(updatedUser));
-          setUser(updatedUser);
-        } else {
-          setUser(parsedUser);
-        }
-      }
-      setIsLoading(false);
-    };
-    initializeUser();
-  }, [address]);
+  const refreshToken = useCallback(async (): Promise<boolean> => {
+    const session = sessionManager.getCurrentSession();
+    if (!session?.refreshToken) return false;
 
-  const connectWallet = async () => {
     try {
-      await connect();
-      if (user && address) {
+      const decoded = authManager.verifyRefreshToken(session.refreshToken);
+      if (!decoded) return false;
+
+      const { token, refreshToken: newRefreshToken } = authManager.generateTokens(session.user);
+      
+      sessionManager.startSession({
+        user: session.user,
+        token,
+        refreshToken: newRefreshToken,
+        expiresAt: Date.now() + 3600000, // 1 hour
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      return false;
+    }
+  }, [authManager, sessionManager]);
+
+  const connectWallet = useCallback(async () => {
+    try {
+      // @ts-expect-error: useMetamask is deprecated but still works
+      const signer = await connectMetamask();
+      if (user && signer && address) {
         const updatedUser = { ...user, walletAddress: address };
-        localStorage.setItem('farmconnect_user', JSON.stringify(updatedUser));
+        const { token, refreshToken } = authManager.generateTokens(updatedUser);
+        
+        sessionManager.startSession({
+          user: updatedUser,
+          token,
+          refreshToken,
+          expiresAt: Date.now() + 3600000,
+        });
+        
         setUser(updatedUser);
       }
     } catch (error) {
       console.error('Failed to connect wallet:', error);
+      setError(error instanceof Error ? error.message : 'Failed to connect wallet');
     }
-  };
+  }, [user, authManager, sessionManager, address, connectMetamask]);
 
-  const disconnectWallet = () => {
+  const disconnectWallet = useCallback(() => {
     disconnect();
     if (user) {
-      const updatedUser = { ...user };
-      delete updatedUser.walletAddress;
-      localStorage.setItem('farmconnect_user', JSON.stringify(updatedUser));
+      const updatedUser = { ...user, walletAddress: '' };
+      const { token, refreshToken } = authManager.generateTokens(updatedUser);
+      
+      sessionManager.startSession({
+        user: updatedUser,
+        token,
+        refreshToken,
+        expiresAt: Date.now() + 3600000,
+      });
+      
       setUser(updatedUser);
     }
-  };
+  }, [user, authManager, sessionManager, disconnect]);
 
-  const login = async (email: string, password: string, role?: 'farmer' | 'middleman' | 'admin') => {
+  const logout = useCallback(() => {
+    sessionManager.endSession();
+    setUser(null);
+    disconnectWallet();
+  }, [sessionManager, disconnectWallet]);
+
+  const handleTokenRefresh = useCallback(async () => {
+    await refreshToken();
+  }, [refreshToken]);
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const session = sessionManager.getCurrentSession();
+      if (session?.token && sessionManager.isSessionValid()) {
+        try {
+          const decoded = authManager.verifyToken(session.token);
+          if (decoded) {
+            setUser(session.user);
+          }
+        } catch (error) {
+          console.error('Invalid session token:', error);
+          sessionManager.endSession();
+        }
+      }
+      setIsLoading(false);
+    };
+
+    initializeAuth();
+
+    window.addEventListener('tokenRefreshNeeded', handleTokenRefresh);
+    return () => {
+      window.removeEventListener('tokenRefreshNeeded', handleTokenRefresh);
+    };
+  }, [sessionManager, handleTokenRefresh, authManager]);
+
+  const login = useCallback(async (email: string, password: string) => {
     try {
+      setError(null);
+      setIsLoading(true);
+
+      // Get users from localStorage
+      const users = JSON.parse(localStorage.getItem('users') || '[]');
+      type StoredUser = User & { password: string };
+      const foundUser = users.find((u: StoredUser) => u.email === email && u.password === password);
+
+      if (!foundUser) {
+        setError('Invalid email or password');
+        return false;
+      }
+
       const mockUser: User = {
-        id: '1',
-        name: 'John Doe',
-        email,
-        role: role ?? 
-          (email.includes('farmer')
-            ? 'farmer'
-            : email.includes('admin')
-            ? 'admin'
-            : 'middleman'),
-        walletAddress: address,
+        id: foundUser.id,
+        email: foundUser.email,
+        name: foundUser.name,
+        role: foundUser.role,
+        location: foundUser.location || '',
+        walletAddress: address || '',
+        tokenVersion: foundUser.tokenVersion || 0,
       };
 
-      localStorage.setItem('farmconnect_user', JSON.stringify(mockUser));
+      const { token, refreshToken } = authManager.generateTokens(mockUser);
+      
+      sessionManager.startSession({
+        user: mockUser,
+        token,
+        refreshToken,
+        expiresAt: Date.now() + 3600000,
+      });
+
       setUser(mockUser);
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
       return true;
     } catch (error) {
-      console.error('Login failed:', error);
+      setError(error instanceof Error ? error.message : 'Login failed');
       return false;
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [authManager, sessionManager, address]);
 
-  const register = async (userData: Partial<User> & { password: string }): Promise<boolean> => {
+  const register = useCallback(async (userData: RegisterData): Promise<boolean> => {
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+      setError(null);
+      setIsLoading(true);
 
+      if (!userData.email || !userData.password || !userData.name || !userData.role) {
+        setError('Missing required fields');
+        return false;
+      }
+
+      // Check if user already exists
+      const existingUsers = localStorage.getItem('users');
+      const users = existingUsers ? JSON.parse(existingUsers) : [];
+      
+      if (users.some((u: User) => u.email === userData.email)) {
+        setError('Email already registered');
+        return false;
+      }
+      
       const newUser: User = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: userData.name || 'Anonymous User',
-        email: userData.email || '',
-        role: userData.role || 'farmer',
-        walletAddress: address,
-        phone: userData.phone,
-        location: userData.location,
+        id: Math.random().toString(36).slice(2, 11),
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+        location: userData.location || '',
+        walletAddress: '',  // Will be set later when connecting wallet
+        tokenVersion: 0,
       };
 
-      localStorage.setItem('farmconnect_user', JSON.stringify(newUser));
+      // Store user in localStorage
+      users.push({ ...newUser, password: userData.password }); // In a real app, this would be hashed
+      localStorage.setItem('users', JSON.stringify(users));
+
+      const { token, refreshToken } = authManager.generateTokens(newUser);
+      
+      sessionManager.startSession({
+        user: newUser,
+        token,
+        refreshToken,
+        expiresAt: Date.now() + 3600000
+      });
+
       setUser(newUser);
       return true;
     } catch (error) {
-      console.error('Registration failed:', error);
+      setError(error instanceof Error ? error.message : 'Registration failed');
       return false;
+    } finally {
+      setIsLoading(false);
     }
-  };
+  }, [authManager, sessionManager]);
 
-  const logout = () => {
-    localStorage.removeItem('farmconnect_user');
-    setUser(null);
-    disconnectWallet();
-  };
+  const contextValue = useMemo(() => ({
+    user,
+    login,
+    register,
+    logout,
+    connectWallet,
+    disconnectWallet,
+    isLoading,
+    error,
+    walletAddress: address,
+    refreshToken: sessionManager.getCurrentSession()?.refreshToken,
+  }), [
+    user,
+    login,
+    register,
+    logout,
+    connectWallet,
+    disconnectWallet,
+    isLoading,
+    error,
+    address,
+    sessionManager
+  ]);
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        login,
-        register,
-        logout,
-        isLoading,
-        connectWallet,
-        disconnectWallet,
-        walletAddress: address,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
 };

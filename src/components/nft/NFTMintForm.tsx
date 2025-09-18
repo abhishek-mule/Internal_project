@@ -5,26 +5,23 @@ import { NFTMetadata } from '../../types';
 import { Upload, Loader2 } from 'lucide-react';
 
 interface NFTMintFormProps {
-  cropId: string;
-  cropName: string;
   onSuccess: () => void;
 }
 
-export const NFTMintForm: React.FC<NFTMintFormProps> = ({
-  cropId,
-  cropName,
-  onSuccess,
-}) => {
+export const NFTMintForm: React.FC<NFTMintFormProps> = ({ onSuccess }) => {
   const { mintProduct } = useContract();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [formData, setFormData] = useState({
+    name: '',
     description: '',
     location: '',
     temperature: '',
     humidity: '',
+    price: '',
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -54,23 +51,29 @@ export const NFTMintForm: React.FC<NFTMintFormProps> = ({
       const reader = new FileReader();
       reader.readAsDataURL(imageFile);
       reader.onloadend = async () => {
-        const base64Image = reader.result as string;
+        try {
+          const base64Image = reader.result as string;
 
-        const metadata: NFTMetadata = {
-          name: cropName,
-          description: formData.description,
-          image: base64Image,
-          properties: {
-            cropId,
-            timestamp: Date.now(),
-            location: formData.location,
-            temperature: parseFloat(formData.temperature),
-            humidity: parseFloat(formData.humidity),
-          },
-        };
+          const metadata: NFTMetadata = {
+            name: cropName,
+            description: formData.description,
+            image: base64Image,
+            properties: {
+              cropId,
+              timestamp: Date.now(),
+              location: formData.location,
+              temperature: parseFloat(formData.temperature),
+              humidity: parseFloat(formData.humidity),
+              farmer: user.walletAddress,
+            },
+          };
 
-        await mintProduct(metadata);
-        onSuccess();
+          await mintProduct(metadata);
+          onSuccess();
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Failed to mint NFT');
+          setIsLoading(false);
+        }
       };
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mint NFT');

@@ -1,7 +1,7 @@
-import { PaymentProvider } from './payments/PaymentProvider';
-import { CryptoPaymentProvider } from './payments/CryptoPaymentProvider';
-import { FiatPaymentProvider } from './payments/FiatPaymentProvider';
-import { TransactionQueue } from '../core/contracts/TransactionQueue';
+import { PaymentProvider } from './PaymentProvider';
+import { CryptoPaymentProvider } from './CryptoPaymentProvider';
+import { FiatPaymentProvider } from './FiatPaymentProvider';
+import { TransactionQueue } from '../../../core/contracts/TransactionQueue';
 import { ethers } from 'ethers';
 
 export interface PaymentDetails {

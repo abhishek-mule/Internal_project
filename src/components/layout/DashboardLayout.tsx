@@ -1,22 +1,30 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import { motion } from 'framer-motion';
 import { 
-  Bell, Search, Settings, LogOut, User, ChevronDown,
-  Menu, X, Home, BarChart3, Package, Truck, Users
+  Home, Package, Users, Truck, Bell, Settings,
+  Menu, X, BarChart3, Search, User, ChevronDown,
+  LogOut
 } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
-import { PaymentScreen } from '../payments/PaymentScreen';
+import { PaymentScreen } from '../../features/payment/components/PaymentScreen';
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
 export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
+  const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
   const [notifications] = useState(3);
+  
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   const getRoleColor = (role: string) => {
     switch (role) {
@@ -197,12 +205,12 @@ export const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) =>
       </main>
 
       {/* Payment Modal */}
-      {showPayment && (
+            {showPayment && (
         <PaymentScreen
-          amount={1250}
-          recipient="Green Valley Farm"
+          productId="test-product"
+          amount={100}
+          sellerId="test-seller"
           onClose={() => setShowPayment(false)}
-          onSuccess={() => console.log('Payment successful')}
         />
       )}
 

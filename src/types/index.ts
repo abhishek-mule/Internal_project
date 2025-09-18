@@ -5,8 +5,9 @@ export interface User {
   role: 'farmer' | 'middleman' | 'admin';
   avatar?: string;
   phone?: string;
-  location?: string;
-  walletAddress?: string;
+  location: string;
+  walletAddress: string;
+  tokenVersion: number;
 }
 
 export interface Crop {
@@ -26,6 +27,23 @@ export interface Crop {
   tokenUri?: string;
 }
 
+export interface CropMetadata {
+  name: string;
+  description: string;
+  image: string;
+  properties: {
+    variety: string;
+    quantity: number;
+    unit: string;
+    pricePerUnit: number;
+    plantedDate: string;
+    expectedHarvest: string;
+    status: 'growing' | 'ready' | 'harvested' | 'sold';
+    progress: number;
+    health: number;
+  };
+}
+
 export interface Shipment {
   id: string;
   orderId: string;
@@ -41,12 +59,33 @@ export interface Shipment {
 
 export interface Transaction {
   id: string;
-  type: 'income' | 'expense';
-  amount: number;
-  description: string;
-  date: string;
-  category: string;
+  type: 'mint' | 'transfer' | 'sale';
+  from: string;
+  to: string;
+  timestamp: number;
+  amount?: number;
   status: 'completed' | 'pending' | 'failed';
+}
+
+export interface NFTMetadata {
+  name: string;
+  description: string;
+  image: string;
+  properties: {
+    timestamp: number;
+    location: string;
+    temperature: number;
+    humidity: number;
+    price?: number;
+    farmer: string;
+    status?: 'available' | 'sold' | 'in-transit';
+    transactionHistory?: Transaction[];
+  };
+}
+
+export interface NFTData extends NFTMetadata {
+  id: string;
+  owner: string;
 }
 
 export interface PaymentMethod {

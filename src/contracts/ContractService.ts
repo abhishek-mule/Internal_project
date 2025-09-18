@@ -47,7 +47,7 @@ export class ContractService {
 
   // Helper method to check if contracts are initialized
   isInitialized(): boolean {
-    return !!this.farmProductContract && !!this.marketplaceContract;
+    return !!this.farmProductContract; // Only check for NFT contract since marketplace is optional
   }
 }
 

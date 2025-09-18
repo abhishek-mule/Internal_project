@@ -1,0 +1,498 @@
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useAddress, useMetamask, useDisconnect } from "@thirdweb-dev/react";
+import { AuthManager } from '../core/auth/AuthManager';
+import { SessionManager } from '../core/auth/SessionManager';
+import { User } from '../types';
+
+interface AuthContextType {
+  user: User | null;
+  login: (email: string, password: string, role?: 'farmer' | 'middleman' | 'admin') => Promise<boolean>;
+  register: (userData: { 
+    email: string;
+    password: string;
+    name: string;
+    role: 'farmer' | 'middleman' | 'admin';
+    location?: string;
+  }) => Promise<boolean>;
+  logout: () => void;
+  isLoading: boolean;
+  connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
+  walletAddress: string | undefined;
+  refreshToken: () => Promise<boolean>;
+  error: string | null;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }): JSX.Element => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  
+  const address = useAddress();
+  const connect = useMetamask();
+  const disconnect = useDisconnect();
+  
+  const authManager = AuthManager.getInstance();
+  const sessionManager = SessionManager.getInstance();
+
+  const refreshToken = useCallback(async (): Promise<boolean> => {
+    try {
+      const session = sessionManager.getCurrentSession();
+      if (!session?.refreshToken || !user) return false;
+
+      const payload = authManager.verifyRefreshToken(session.refreshToken);
+      if (!payload) return false;
+
+      const { token, refreshToken: newRefreshToken } = authManager.generateTokens(user);
+      
+      sessionManager.startSession({
+        user,
+        token,
+        refreshToken: newRefreshToken,
+        expiresAt: Date.now() + 3600000,
+      });
+
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Token refresh failed');
+      return false;
+    }
+  }, [user]);
+
+  const handleTokenRefresh = useCallback(() => {
+    refreshToken();
+  }, [refreshToken]);
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      try {
+        const session = sessionManager.getCurrentSession();
+        if (session && sessionManager.isSessionValid()) {
+          setUser(session.user);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Session initialization failed');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    initializeAuth();
+
+    window.addEventListener('tokenRefreshNeeded', handleTokenRefresh);
+    return () => {
+      window.removeEventListener('tokenRefreshNeeded', handleTokenRefresh);
+    };
+  }, [handleTokenRefresh]);
+
+  const connectWallet = useCallback(async () => {
+    try {
+      setError(null);
+      await connect();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Wallet connection failed');
+    }
+  }, [connect]);
+
+  const disconnectWallet = useCallback(() => {
+    try {
+      setError(null);
+      disconnect();
+      if (user) {
+        const updatedUser = { ...user, walletAddress: undefined };
+        setUser(updatedUser);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Wallet disconnection failed');
+    }
+  }, [disconnect, user]);
+
+  const logout = useCallback(() => {
+    sessionManager.clearSession();
+    setUser(null);
+    setError(null);
+    disconnectWallet();
+  }, [disconnectWallet]);
+
+  const login = useCallback(async (
+    email: string, 
+    password: string, 
+    role?: 'farmer' | 'middleman' | 'admin'
+  ): Promise<boolean> => {
+    try {
+      setError(null);
+      // Mock implementation - replace with actual login logic
+      const mockUser: User = {
+        id: Math.random().toString(36).slice(2, 11),
+        email,
+        name: email.split('@')[0],
+        role: role || 'farmer',
+        walletAddress: address,
+        tokenVersion: 0
+      };
+
+      const { token, refreshToken } = authManager.generateTokens(mockUser);
+      
+      sessionManager.startSession({
+        user: mockUser,
+        token,
+        refreshToken,
+        expiresAt: Date.now() + 3600000,
+      });
+
+      setUser(mockUser);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+      return false;
+    }
+  }, [address]);
+
+  const register = useCallback(async (userData: { 
+    email: string;
+    password: string;
+    name: string;
+    role: 'farmer' | 'middleman' | 'admin';
+    location?: string;
+  }): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      const newUser: User = {
+        id: Math.random().toString(36).slice(2, 11),
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+        location: userData.location,
+        walletAddress: address,
+        tokenVersion: 0
+      };
+
+      const { token, refreshToken } = authManager.generateTokens(newUser);
+      
+      sessionManager.startSession({
+        user: newUser,
+        token,
+        refreshToken,
+        expiresAt: Date.now() + 3600000
+      });
+
+      setUser(newUser);
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed');
+      return false;
+    }
+  }, [address]);
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        register,
+        logout,
+        isLoading,
+        connectWallet,
+        disconnectWallet,
+        walletAddress: address,
+        refreshToken,
+        error,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+
+type UserRole = 'farmer' | 'middleman' | 'admin';
+
+interface RegisterData {
+  email: string;
+  password: string;
+  name: string;
+  role: UserRole;
+  location?: string;
+}
+
+interface AuthContextType {
+  user: User | null;
+  login: (email: string, password: string, role?: UserRole) => Promise<boolean>;
+  register: (userData: RegisterData) => Promise<boolean>;
+  logout: () => void;
+  isLoading: boolean;
+  connectWallet: () => Promise<void>;
+  disconnectWallet: () => void;
+  walletAddress: string | undefined;
+  refreshToken: () => Promise<boolean>;
+  error: string | null;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const address = useAddress();
+  const connect = useMetamask();
+  const disconnect = useDisconnect();
+  
+  const authManager = AuthManager.getInstance();
+  const sessionManager = SessionManager.getInstance();
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const session = sessionManager.getCurrentSession();
+      if (session && sessionManager.isSessionValid()) {
+        setUser(session.user);
+      }
+      setIsLoading(false);
+    };
+
+    initializeAuth();
+
+    // Listen for token refresh events
+    window.addEventListener('tokenRefreshNeeded', handleTokenRefresh);
+    return () => {
+      window.removeEventListener('tokenRefreshNeeded', handleTokenRefresh);
+    };
+  }, []);
+
+  const handleTokenRefresh = async () => {
+    await refreshToken();
+  };
+
+  const refreshToken = async (): Promise<boolean> => {
+    const session = sessionManager.getCurrentSession();
+    if (!session?.refreshToken) return false;
+
+    try {
+      const decoded = authManager.verifyRefreshToken(session.refreshToken);
+      if (!decoded) return false;
+
+      const { token, refreshToken: newRefreshToken } = authManager.generateTokens(session.user);
+      
+      sessionManager.startSession({
+        user: session.user,
+        token,
+        refreshToken: newRefreshToken,
+        expiresAt: Date.now() + 3600000, // 1 hour
+      });
+
+      return true;
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+      logout();
+      return false;
+    }
+  };
+
+  const connectWallet = async () => {
+    try {
+      await connect();
+      if (user && address) {
+        const updatedUser = { ...user, walletAddress: address };
+        const { token, refreshToken } = authManager.generateTokens(updatedUser);
+        
+        sessionManager.startSession({
+          user: updatedUser,
+          token,
+          refreshToken,
+          expiresAt: Date.now() + 3600000,
+        });
+        
+        setUser(updatedUser);
+      }
+    } catch (error) {
+      console.error('Failed to connect wallet:', error);
+    }
+  };
+
+  const disconnectWallet = () => {
+    disconnect();
+    if (user) {
+      const updatedUser = { ...user };
+      delete updatedUser.walletAddress;
+      
+      const { token, refreshToken } = authManager.generateTokens(updatedUser);
+      
+      sessionManager.startSession({
+        user: updatedUser,
+        token,
+        refreshToken,
+        expiresAt: Date.now() + 3600000,
+      });
+      
+      setUser(updatedUser);
+    }
+  };
+
+  const login = async (email: string, password: string, role?: 'farmer' | 'middleman' | 'admin') => {
+    try {
+      // Implement your actual login logic here
+      // This is a mock implementation
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const mockUser: User = {
+        id: Math.random().toString(36).slice(2, 11),
+        email,
+        name: email.split('@')[0],
+        role: role || 'farmer',
+        walletAddress: address,
+        tokenVersion: 0,
+      };
+
+      const { token, refreshToken } = authManager.generateTokens(mockUser);
+      
+      sessionManager.startSession({
+        user: mockUser,
+        token,
+        refreshToken,
+        expiresAt: Date.now() + 3600000,
+      });
+
+      setUser(mockUser);
+      return true;
+    } catch (error) {
+      console.error(error instanceof Error ? error.message : 'Login failed');
+      return false;
+    }
+  };
+
+    const register = async (userData: { 
+    email: string;
+    password: string;
+    name: string;
+    role: 'farmer' | 'middleman' | 'admin';
+    location?: string;
+  }): Promise<boolean> => {
+    try {
+      setError(null);
+      
+      const newUser: User = {
+        id: Math.random().toString(36).slice(2, 11),
+        email: userData.email,
+        name: userData.name,
+        role: userData.role,
+        location: userData.location,
+        walletAddress: address,
+        tokenVersion: 0
+      };
+
+      const { token, refreshToken } = authManager.generateTokens(newUser);
+      
+      sessionManager.startSession({
+        user: newUser,
+        token,
+        refreshToken,
+        expiresAt: Date.now() + 3600000
+      });
+
+      setUser(newUser);
+      return true;
+    } catch (error) {
+      setError(error instanceof Error ? error.message : 'Registration failed');
+      return false;
+    }
+    try {
+      // Validate required fields
+      if (!userData.email || !userData.password || !userData.name || !userData.role) {
+        throw new Error('Missing required fields');
+      }
+
+      // Create a new user object
+      const newUser: User = {
+        id: Math.random().toString(36).slice(2, 11),
+        email: userData.email,
+        name: userData.name,
+        role: userData.role as 'farmer' | 'middleman' | 'admin',
+        walletAddress: address || undefined,
+        tokenVersion: 0
+      };
+
+      // Generate tokens
+      const { token, refreshToken: refresh } = authManager.generateTokens(newUser);
+
+      // Start a new session
+      sessionManager.startSession({
+        user: newUser,
+        token,
+        refreshToken: refresh,
+        expiresAt: Date.now() + 3600000
+      });
+
+      setUser(newUser);
+      return true;
+    try {
+      // Implement your actual registration logic here
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      const newUser: User = {
+        id: Math.random().toString(36).slice(2, 11),
+        name: userData.name || 'Anonymous User',
+        email: userData.email || '',
+        role: userData.role || 'farmer',
+        walletAddress: address,
+        tokenVersion: 0,
+      };
+
+      const { token, refreshToken: newRefreshToken } = authManager.generateTokens(newUser);
+      
+      sessionManager.startSession({
+        user: newUser,
+        token,
+        refreshToken: newRefreshToken,
+        expiresAt: Date.now() + 3600000,
+      });
+
+      setUser(newUser);
+      return true;
+    } catch (error) {
+      console.error('Registration failed:', error);
+      return false;
+    }
+  };
+
+  const logout = () => {
+    sessionManager.endSession();
+    setUser(null);
+    disconnectWallet();
+  };
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        register,
+        logout,
+        isLoading,
+        connectWallet,
+        disconnectWallet,
+        walletAddress: address,
+        refreshToken,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Mail, Lock, User, MapPin, Eye, EyeOff, Sprout, ArrowRight } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../hooks/useAuth';
 
 interface RegisterFormProps {
   onToggleMode: () => void;
@@ -26,13 +26,37 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
     { id: 'admin', name: 'Admin', icon: '⚙️', color: 'bg-purple-100 text-purple-800 border-purple-200' }
   ];
 
+  const [error, setError] = useState('');
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.password !== formData.confirmPassword) {
-      alert('Passwords do not match');
+    setError('');
+    
+    if (!formData.email || !formData.password || !formData.name || !formData.role) {
+      setError('Please fill in all required fields');
       return;
     }
-    await register(formData);
+    
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    
+    try {
+      const success = await register({
+        email: formData.email,
+        password: formData.password,
+        name: formData.name,
+        role: formData.role as 'farmer' | 'middleman' | 'admin',
+        location: formData.location
+      });
+
+      if (!success) {
+        setError('Registration failed. Please try again.');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
+    }
   };
 
   const handleInputChange = (field: string, value: string) => {
@@ -57,6 +81,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="p-3 text-sm text-red-700 bg-red-100 rounded-lg" role="alert">
+            {error}
+          </div>
+        )}
         {/* Role Selection */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">

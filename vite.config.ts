@@ -7,22 +7,26 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      '@': resolve(__dirname, 'src'),
       process: 'process/browser',
       stream: 'stream-browserify',
       util: 'util/',
       buffer: 'buffer',
-    },
-  },
-  optimizeDeps: {
-    exclude: ['lucide-react'],
-    esbuildOptions: {
-      define: {
-        global: 'globalThis',
-      },
+      react: 'react',
+      crypto: 'crypto-browserify',
     },
   },
   define: {
     'process.env': {},
     global: 'globalThis',
+  },
+  optimizeDeps: {
+    exclude: ['lucide-react'],
+    include: ['jsonwebtoken', 'buffer', 'process'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
   },
 });
